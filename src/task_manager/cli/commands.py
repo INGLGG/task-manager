@@ -7,11 +7,17 @@ from rich.table import Table
 
 from task_manager.db.database import SessionLocal, init_db
 from task_manager.models.task import Priority, Status
-from task_manager.services import task_service, timer_service
+from task_manager.services import task_service, timer_service, work_task_service
 
 app = typer.Typer(help="Task Manager CLI")
 timer_app = typer.Typer(help="Timer commands")
 app.add_typer(timer_app, name="timer")
+
+work_app = typer.Typer(help="Business-hours task commands (timer counts 09:00–18:00 only)")
+work_timer_app = typer.Typer(help="Business-hours task timer")
+work_app.add_typer(work_timer_app, name="timer")
+app.add_typer(work_app, name="work")
+
 console = Console()
 
 DATE_FORMAT = "%Y-%m-%d"
@@ -224,3 +230,155 @@ def update_task(
         console.print(f"[red]Task #{task_id} not found.[/red]")
         raise typer.Exit(1)
     console.print(f"[green]Task #{task_id} updated.[/green]")
+
+
+# ---------------------------------------------------------------------------
+# work — business-hours tasks
+# ---------------------------------------------------------------------------
+
+
+@work_app.command("add")
+def work_add(
+    title: str = typer.Argument(..., help="Task title"),
+    description: Optional[str] = typer.Option(None, "--desc", "-d"),
+) -> None:
+    """Create a business-hours task (timer counts 09:00–18:00 only)."""
+    db = _db()
+    task = work_task_service.create(db, title, description)
+    db.close()
+    console.print(f"[green]Work task #{task.id} created:[/green] {task.title}")
+
+
+@work_app.command("list")
+def work_list() -> None:
+    """List all business-hours tasks."""
+    db = _db()
+    tasks = work_task_service.get_all(db)
+    db.close()
+    table = Table(title="Work Tasks (09:00–18:00)")
+    table.add_column("ID", style="cyan")
+    table.add_column("Title")
+    table.add_column("Timer", style="green")
+    table.add_column("Elapsed")
+    for t in tasks:
+        table.add_row(
+            str(t.id),
+            t.title,
+            t.timer_status.value,
+            _fmt_elapsed(t.elapsed_seconds),
+        )
+    console.print(table)
+
+
+@work_app.command("show")
+def work_show(task_id: int = typer.Argument(..., help="Task ID")) -> None:
+    """Show details of a single business-hours task."""
+    db = _db()
+    task = work_task_service.get_by_id(db, task_id)
+    if not task:
+        db.close()
+        console.print(f"[red]Work task #{task_id} not found.[/red]")
+        raise typer.Exit(1)
+    elapsed = work_task_service.get_elapsed(task)
+    db.close()
+    table = Table(show_header=False, box=None)
+    table.add_column("Field", style="cyan", min_width=14)
+    table.add_column("Value")
+    table.add_row("ID", str(task.id))
+    table.add_row("Title", task.title)
+    table.add_row("Description", task.description or "-")
+    table.add_row("Timer status", task.timer_status.value)
+    table.add_row("Elapsed (biz)", _fmt_elapsed(elapsed))
+    table.add_row("Created", str(task.created_at.date()))
+    console.print(table)
+
+
+@work_app.command("delete")
+def work_delete(task_id: int = typer.Argument(..., help="Task ID")) -> None:
+    """Delete a business-hours task."""
+    db = _db()
+    if not work_task_service.delete(db, task_id):
+        db.close()
+        console.print(f"[red]Work task #{task_id} not found.[/red]")
+        raise typer.Exit(1)
+    db.close()
+    console.print(f"[red]Work task #{task_id} deleted.[/red]")
+
+
+@work_timer_app.command("start")
+def work_timer_start(task_id: int = typer.Argument(..., help="Task ID")) -> None:
+    """Start the business-hours timer."""
+    db = _db()
+    try:
+        task = work_task_service.start_timer(db, task_id)
+        db.close()
+        console.print(f"[green]Work task #{task.id} timer started.[/green]")
+    except ValueError as exc:
+        db.close()
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+
+@work_timer_app.command("pause")
+def work_timer_pause(task_id: int = typer.Argument(..., help="Task ID")) -> None:
+    """Pause the business-hours timer."""
+    db = _db()
+    try:
+        task = work_task_service.pause_timer(db, task_id)
+        db.close()
+        console.print(
+            f"[yellow]Work task #{task.id} timer paused. "
+            f"Business-hours elapsed: {_fmt_elapsed(task.elapsed_seconds)}[/yellow]"
+        )
+    except ValueError as exc:
+        db.close()
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+
+@work_timer_app.command("resume")
+def work_timer_resume(task_id: int = typer.Argument(..., help="Task ID")) -> None:
+    """Resume the business-hours timer."""
+    db = _db()
+    try:
+        task = work_task_service.resume_timer(db, task_id)
+        db.close()
+        console.print(f"[green]Work task #{task.id} timer resumed.[/green]")
+    except ValueError as exc:
+        db.close()
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+
+@work_timer_app.command("stop")
+def work_timer_stop(task_id: int = typer.Argument(..., help="Task ID")) -> None:
+    """Stop the timer and finalise business-hours elapsed time."""
+    db = _db()
+    try:
+        task = work_task_service.stop_timer(db, task_id)
+        db.close()
+        console.print(
+            f"[red]Work task #{task.id} timer stopped. "
+            f"Total business-hours: {_fmt_elapsed(task.elapsed_seconds)}[/red]"
+        )
+    except ValueError as exc:
+        db.close()
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+
+@work_timer_app.command("status")
+def work_timer_status(task_id: int = typer.Argument(..., help="Task ID")) -> None:
+    """Show current business-hours timer status and elapsed time."""
+    db = _db()
+    task = work_task_service.get_by_id(db, task_id)
+    if not task:
+        db.close()
+        console.print(f"[red]Work task #{task_id} not found.[/red]")
+        raise typer.Exit(1)
+    elapsed = work_task_service.get_elapsed(task)
+    db.close()
+    console.print(
+        f"Work task #{task_id} · status=[cyan]{task.timer_status.value}[/cyan] · "
+        f"business-hours elapsed={_fmt_elapsed(elapsed)}"
+    )

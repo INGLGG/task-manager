@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from task_manager.config import settings
 from task_manager.models.task import Base
+import task_manager.models.work_task  # noqa: F401 — registers WorkTask table with Base
 
 engine = create_engine(
     settings.database_url,

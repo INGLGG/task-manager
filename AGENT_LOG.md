@@ -53,3 +53,53 @@ the persisted timestamp on the next read.
 | `tests/test_models.py::test_task_defaults` | `mapped_column(default=...)` in SQLAlchemy 2.x is an INSERT-time default, not a Python `__init__` default; `Task(title="...")` returned `None` for `status` and `priority` | Added explicit `__init__` to `Task` with Python-level keyword defaults |
 
 Result: **40 / 40 passed**.
+
+---
+
+## AC: Business-hours task — timer counts only 09:00–18:00 each day
+
+**Prompt:** "create the logic on the API and the CLI for a new type of task … tracked under working hours, from 9am till 6pm; time not covered in that window is considered as pause."
+
+**Skill applied:** `timer-logic-scaffold` — state machine + accumulator + boundary-condition tests.
+
+### Design decision — `business_hours_seconds` accumulator
+
+The key difference from a regular task timer is the accumulator function.
+Instead of `(end - start).total_seconds()`, elapsed is computed by intersecting
+each calendar day's running segment with the `[09:00, 18:00)` window:
+
+```
+for each day d in [start.date .. end.date]:
+    seg = intersection([start, end], [d 09:00, d 18:00])
+    total += seg.duration
+```
+
+This handles midnight crossings, multi-day spans, and segments entirely outside
+the window (→ 0 s) without any special-case branching.
+
+The `timer_started_at` column is still persisted to the DB, so the live elapsed
+can be reconstructed after a process restart using the same formula.
+
+### Files changed / created
+
+| File | What was added |
+|---|---|
+| `src/task_manager/models/work_task.py` | **New** — `WorkTask` ORM model sharing `Base` and `TimerStatus` from `task.py` |
+| `src/task_manager/services/work_task_service.py` | **New** — `business_hours_seconds`, `get_elapsed`, CRUD, and state machine (`start` / `pause` / `resume` / `stop`) with injectable `at` parameter |
+| `src/task_manager/api/routes/work_tasks.py` | **New** — `POST/GET /work-tasks/`, `GET/DELETE /work-tasks/{id}`, `GET/POST /work-tasks/{id}/timer/{action}` |
+| `src/task_manager/api/main.py` | Mounts `work_tasks` router under `/work-tasks` |
+| `src/task_manager/db/database.py` | Imports `work_task` module so `WorkTask` table is registered with `Base` before `create_all` |
+| `src/task_manager/cli/commands.py` | `work` sub-app (add / list / show / delete) + nested `work timer` sub-app (start / pause / resume / stop / status) |
+
+### Test coverage (`tests/test_work_tasks.py` — 34 tests)
+
+| Group | Tests |
+|---|---|
+| `business_hours_seconds` accumulator | full day, before/after window, partial overlap, multi-day, overnight, midnight crossing, zero-length, reversed |
+| State machine (happy paths) | start, pause accumulates BH seconds only, resume→stop, stop-while-paused, multiple cycles |
+| `get_elapsed` | idle, running (pre-window start trimmed), paused frozen |
+| Boundary conditions | overnight run → 0 s off-hours; leave running past 18:00; resume after restart |
+| Invalid transitions | pause/resume/stop when idle; double-start; not-found |
+| API endpoints | CRUD lifecycle, timer lifecycle, 409 conflict, 404 not-found |
+
+**Total suite: 74 / 74 passed.**
