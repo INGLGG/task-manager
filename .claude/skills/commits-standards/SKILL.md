@@ -57,7 +57,6 @@ Keep entries factual and terse. The table is the most important part — it lets
 
 - One bullet per logical change (not per file).
 - Group related file edits under a single bullet.
-- End with the test result line.
 - Always add the `Co-Authored-By` trailer.
 
 ### Full example
@@ -71,7 +70,6 @@ feat: add due_date field to tasks
 - Exposed due_date in TaskCreate, TaskUpdate, TaskResponse schemas
 - Added --due CLI option to `add` and `update` commands
 - Updated test_services, test_api, test_cli with due_date assertions
-- 82/82 tests passing
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF
@@ -97,3 +95,4 @@ EOF
 - Do not write `git add .` — stage files explicitly to avoid committing secrets or build artefacts.
 - Do not amend a previous commit to add new work — create a new commit.
 - Do not exceed 60 characters on the subject line; break long descriptions into the body.
+- Do not add test passed

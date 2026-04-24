@@ -263,3 +263,15 @@ Deleted `tasks.db` so `init_db()` recreates the schema with the new columns on n
 ### Result
 
 Both skills are now self-contained references. A future agent instance reading either file has enough context to apply the pattern without consulting the rest of the codebase.
+
+---
+
+## AC: Remove test-result line from commit standard
+
+**Prompt:** "Commit the small change I did."
+
+### Changes
+
+| File | What changed |
+|---|---|
+| `.claude/skills/commits-standards/SKILL.md` | Removed "End with the test result line" from description rules; removed example test-count line from the commit body example; added "Do not add test passed" to the anti-patterns section |
