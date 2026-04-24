@@ -246,3 +246,20 @@ Deleted `tasks.db` so `init_db()` recreates the schema with the new columns on n
 `task-manager list` was failing with `OperationalError: no such column: tasks.task_type` because the on-disk `tasks.db` had the pre-STI schema. `create_all` never alters existing tables, so the new column was never added. Fixed by deleting the stale file.
 
 **Total suite: 80 / 80 passed.**
+
+---
+
+## AC: Complete skill documentation with overview and examples
+
+**Prompt:** "Complete the 2 skills in the project with an Overview, a little explanation, and when possible with coding examples."
+
+### Changes
+
+| File | What changed |
+|---|---|
+| `.claude/skills/commits-standards/SKILL.md` | Added full Overview, two-step workflow (log then commit), subject-line rules table, bullet-list body rules, full `git commit` example with HEREDOC, prefix cheat-sheet, and anti-patterns |
+| `.claude/skills/timer-logic-scaffold/SKILL.md` | Added full Overview, state machine diagram with column reference table, service-layer transition code examples (`start`/`pause`/`resume`/`stop`), accumulator explanation with formula, polymorphic `get_elapsed` override example for `WorkTask`, boundary-condition test suite with code, minimum test checklist, and trigger phrases |
+
+### Result
+
+Both skills are now self-contained references. A future agent instance reading either file has enough context to apply the pattern without consulting the rest of the codebase.
