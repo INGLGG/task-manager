@@ -152,6 +152,17 @@ def test_bhs_reversed_returns_zero() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_work_task_type(db: Session, task) -> None:
+    """WorkTask inherits from Task and carries task_type='work'."""
+    from task_manager.models.task import Task
+    from task_manager.models.work_task import WorkTask
+    assert isinstance(task, WorkTask)
+    assert isinstance(task, Task)
+    assert task.task_type == "work"
+    assert task.status == "todo"   # all new tasks default to todo
+    assert task.priority is None
+
+
 def test_start(db: Session, task) -> None:
     t = svc.start_timer(db, task.id, at=MON_9AM)
     assert t.timer_status == TimerStatus.running

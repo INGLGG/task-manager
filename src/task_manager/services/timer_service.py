@@ -20,24 +20,24 @@ def _now() -> datetime:
 
 
 def _fetch(db: Session, task_id: int) -> Task:
+    from task_manager.models.work_task import WorkTask  # local import avoids circular dep
+
     task = task_service.get_by_id(db, task_id)
     if task is None:
         raise ValueError(f"Task {task_id} not found")
+    if isinstance(task, WorkTask):
+        raise ValueError(
+            f"Task {task_id} is a work task — use the /work-tasks timer endpoints"
+        )
     return task
 
 
 def get_elapsed(task: Task, at: datetime | None = None) -> float:
-    """Return total elapsed seconds, including the live running segment (if any).
+    """Elapsed seconds — delegates to the polymorphic model method.
 
-    Accepts an optional `at` timestamp so callers can compute elapsed at any
-    point in time — useful for testing boundary conditions such as midnight
-    rollovers or post-restart reads.
+    Regular Task uses wall-clock math; WorkTask uses business-hours math.
     """
-    base = float(task.elapsed_seconds)
-    if task.timer_status == TimerStatus.running and task.timer_started_at is not None:
-        reference = at if at is not None else _now()
-        base += (reference - task.timer_started_at).total_seconds()
-    return base
+    return task.get_elapsed(at)
 
 
 def start_timer(db: Session, task_id: int, at: datetime | None = None) -> Task:

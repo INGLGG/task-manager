@@ -7,63 +7,30 @@ Timer scaffold (per timer-logic-scaffold skill):
   running ──stop──► stopped
   paused  ──stop──► stopped
 
-Accumulator: only seconds that fall inside WORK_START_HOUR–WORK_END_HOUR each
-calendar day are counted.  Anything outside that window is implicitly paused,
-so a timer left running overnight or over a weekend accumulates nothing during
-the off-hours period.
+Elapsed is computed via business_hours_seconds (09:00–18:00 each calendar day).
+Off-hours time is implicitly discarded — the timer need not be manually paused
+at end-of-day.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from task_manager.models.task import TimerStatus
-from task_manager.models.work_task import WorkTask
+from task_manager.models.work_task import WorkTask, business_hours_seconds  # re-exported for tests
 
-WORK_START_HOUR: int = 9
-WORK_END_HOUR: int = 18
-
-
-# ---------------------------------------------------------------------------
-# Core accumulator
-# ---------------------------------------------------------------------------
-
-
-def business_hours_seconds(start: datetime, end: datetime) -> float:
-    """Return the seconds of the [start, end) interval that fall within
-    WORK_START_HOUR–WORK_END_HOUR on each calendar day.
-
-    Works correctly across midnight, multi-day, and multi-week spans.
-    Accepts an optional `at` timestamp so callers can compute elapsed at any
-    deterministic point in time (required for unit-testing boundary conditions
-    such as midnight rollovers and post-restart reads).
-    """
-    if end <= start:
-        return 0.0
-
-    total = 0.0
-    day: date = start.date()
-    end_date: date = end.date()
-
-    while day <= end_date:
-        window_start = datetime(day.year, day.month, day.day, WORK_START_HOUR)
-        window_end = datetime(day.year, day.month, day.day, WORK_END_HOUR)
-        seg_start = max(start, window_start)
-        seg_end = min(end, window_end)
-        if seg_end > seg_start:
-            total += (seg_end - seg_start).total_seconds()
-        day += timedelta(days=1)
-
-    return total
-
-
-def get_elapsed(task: WorkTask, at: datetime | None = None) -> float:
-    """Total business-hours elapsed seconds, including the live running segment."""
-    base = float(task.elapsed_seconds)
-    if task.timer_status == TimerStatus.running and task.timer_started_at is not None:
-        reference = at if at is not None else _now()
-        base += business_hours_seconds(task.timer_started_at, reference)
-    return base
+__all__ = [
+    "business_hours_seconds",
+    "create",
+    "get_all",
+    "get_by_id",
+    "delete",
+    "get_elapsed",
+    "start_timer",
+    "pause_timer",
+    "resume_timer",
+    "stop_timer",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +51,8 @@ def get_all(db: Session) -> list[WorkTask]:
 
 
 def get_by_id(db: Session, task_id: int) -> WorkTask | None:
-    return db.get(WorkTask, task_id)
+    # Use query (not db.get) so the discriminator filter is applied automatically.
+    return db.query(WorkTask).filter(WorkTask.id == task_id).first()
 
 
 def delete(db: Session, task_id: int) -> bool:
@@ -94,6 +62,16 @@ def delete(db: Session, task_id: int) -> bool:
     db.delete(task)
     db.commit()
     return True
+
+
+# ---------------------------------------------------------------------------
+# Elapsed helper — delegates to the polymorphic model method
+# ---------------------------------------------------------------------------
+
+
+def get_elapsed(task: WorkTask, at: datetime | None = None) -> float:
+    """Business-hours elapsed seconds (delegates to WorkTask.get_elapsed)."""
+    return task.get_elapsed(at)
 
 
 # ---------------------------------------------------------------------------

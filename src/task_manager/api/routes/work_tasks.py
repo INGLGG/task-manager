@@ -25,6 +25,7 @@ class WorkTaskResponse(BaseModel):
     id: int
     title: str
     description: str | None
+    task_type: str              # always "work"
     timer_status: TimerStatus
     elapsed_seconds: int
     created_at: datetime

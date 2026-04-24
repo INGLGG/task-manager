@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 
 import typer
@@ -20,8 +19,6 @@ app.add_typer(work_app, name="work")
 
 console = Console()
 
-DATE_FORMAT = "%Y-%m-%d"
-
 
 def _db():
     init_db()
@@ -30,25 +27,27 @@ def _db():
 
 @app.command("list")
 def list_tasks() -> None:
-    """List all tasks."""
+    """List all tasks (regular and work)."""
     db = _db()
     tasks = task_service.get_all(db)
     db.close()
 
-    table = Table(title="Tasks")
+    table = Table(title="All Tasks")
     table.add_column("ID", style="cyan")
     table.add_column("Title")
+    table.add_column("Type", style="blue")
     table.add_column("Status", style="green")
     table.add_column("Priority", style="yellow")
-    table.add_column("Due Date")
+    table.add_column("Elapsed")
 
     for t in tasks:
         table.add_row(
             str(t.id),
             t.title,
-            t.status.value,
-            t.priority.value,
-            str(t.due_date.date()) if t.due_date else "-",
+            t.task_type,
+            t.status.value if t.status else "-",
+            t.priority.value if t.priority else "-",
+            _fmt_elapsed(t.get_elapsed()),
         )
 
     console.print(table)
@@ -59,11 +58,10 @@ def add_task(
     title: str = typer.Argument(..., help="Task title"),
     description: Optional[str] = typer.Option(None, "--desc", "-d"),
     priority: Priority = typer.Option(Priority.medium, "--priority", "-p"),
-    due_date: Optional[datetime] = typer.Option(None, "--due", formats=["%Y-%m-%d"]),
 ) -> None:
     """Create a new task."""
     db = _db()
-    task = task_service.create(db, title, description, priority, due_date)
+    task = task_service.create(db, title, description, priority)
     db.close()
     console.print(f"[green]Task #{task.id} created:[/green] {task.title}")
 
@@ -108,9 +106,8 @@ def show_task(task_id: int = typer.Argument(..., help="Task ID")) -> None:
     table.add_row("ID", str(task.id))
     table.add_row("Title", task.title)
     table.add_row("Description", task.description or "-")
-    table.add_row("Status", task.status.value)
-    table.add_row("Priority", task.priority.value)
-    table.add_row("Due Date", str(task.due_date.date()) if task.due_date else "-")
+    table.add_row("Status", task.status.value if task.status else "-")
+    table.add_row("Priority", task.priority.value if task.priority else "-")
     table.add_row("Created", str(task.created_at.date()))
     table.add_row("Updated", str(task.updated_at.date()))
     console.print(table)
@@ -208,7 +205,6 @@ def update_task(
     description: Optional[str] = typer.Option(None, "--desc", "-d", help="New description"),
     status: Optional[Status] = typer.Option(None, "--status", "-s", help="New status"),
     priority: Optional[Priority] = typer.Option(None, "--priority", "-p", help="New priority"),
-    due_date: Optional[datetime] = typer.Option(None, "--due", formats=[DATE_FORMAT], help="New due date (YYYY-MM-DD)"),
 ) -> None:
     """Update fields on an existing task."""
     updates = {k: v for k, v in {
@@ -216,7 +212,6 @@ def update_task(
         "description": description,
         "status": status,
         "priority": priority,
-        "due_date": due_date,
     }.items() if v is not None}
 
     if not updates:
@@ -265,7 +260,7 @@ def work_list() -> None:
             str(t.id),
             t.title,
             t.timer_status.value,
-            _fmt_elapsed(t.elapsed_seconds),
+            _fmt_elapsed(t.get_elapsed()),
         )
     console.print(table)
 

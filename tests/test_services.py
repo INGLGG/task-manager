@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from task_manager.models.task import Base, Priority, Status
-from task_manager.services import task_service
+from task_manager.services import task_service, work_task_service
 
 
 @pytest.fixture()
@@ -26,6 +26,7 @@ def test_create_task(db: Session) -> None:
     assert task.id is not None
     assert task.title == "Buy milk"
     assert task.status == Status.todo
+    assert task.task_type == "regular"
 
 
 def test_get_all(db: Session) -> None:
@@ -33,6 +34,16 @@ def test_get_all(db: Session) -> None:
     task_service.create(db, title="Task B")
     tasks = task_service.get_all(db)
     assert len(tasks) == 2
+
+
+def test_get_all_returns_work_tasks_too(db: Session) -> None:
+    """task_service.get_all is polymorphic — returns all subtypes."""
+    task_service.create(db, title="Regular")
+    work_task_service.create(db, title="Work")
+    tasks = task_service.get_all(db)
+    assert len(tasks) == 2
+    types = {t.task_type for t in tasks}
+    assert types == {"regular", "work"}
 
 
 def test_update_status(db: Session) -> None:

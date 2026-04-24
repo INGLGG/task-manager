@@ -11,7 +11,7 @@ runner = CliRunner()
 
 def _make_task(**kwargs) -> Task:
     defaults = dict(id=1, title="Sample", description=None, status=Status.todo,
-                    priority=Priority.medium, due_date=None,
+                    priority=Priority.medium,
                     created_at=datetime(2024, 1, 1), updated_at=datetime(2024, 1, 2))
     defaults.update(kwargs)
     t = Task(**{k: v for k, v in defaults.items() if k not in ("id", "created_at", "updated_at")})

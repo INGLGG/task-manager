@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from sqlalchemy.orm import Session
 
 from task_manager.models.task import Priority, Status, Task
@@ -18,14 +16,8 @@ def create(
     title: str,
     description: str | None = None,
     priority: Priority = Priority.medium,
-    due_date: datetime | None = None,
 ) -> Task:
-    task = Task(
-        title=title,
-        description=description,
-        priority=priority,
-        due_date=due_date,
-    )
+    task = Task(title=title, description=description, priority=priority)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -39,7 +31,6 @@ def update(
     description: str | None = None,
     status: Status | None = None,
     priority: Priority | None = None,
-    due_date: datetime | None = None,
 ) -> Task | None:
     task = get_by_id(db, task_id)
     if not task:
@@ -52,8 +43,6 @@ def update(
         task.status = status
     if priority is not None:
         task.priority = priority
-    if due_date is not None:
-        task.due_date = due_date
     db.commit()
     db.refresh(task)
     return task

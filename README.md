@@ -52,3 +52,15 @@ task-manager delete 1
 ```bash
 make test
 ```
+
+## Resetting the database
+
+> **Warning: this permanently deletes all tasks and work tasks. There is no undo.**
+
+The database is a local SQLite file (`tasks.db`). You must reset it manually whenever the schema changes (e.g. after a model migration) or to start from a clean state.
+
+```bash
+rm -f tasks.db
+```
+
+The file is recreated automatically with the current schema the next time you run the API server or any CLI command.

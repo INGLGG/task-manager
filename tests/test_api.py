@@ -39,6 +39,7 @@ def test_create_and_list(client) -> None:
     data = resp.json()
     assert data["title"] == "Test task"
     assert data["priority"] == "high"
+    assert data["task_type"] == "regular"
 
     resp = client.get("/tasks/")
     assert resp.status_code == 200
@@ -67,3 +68,26 @@ def test_delete_task(client) -> None:
     task_id = client.post("/tasks/", json={"title": "Delete me"}).json()["id"]
     assert client.delete(f"/tasks/{task_id}").status_code == 204
     assert client.get(f"/tasks/{task_id}").status_code == 404
+
+
+def test_tasks_list_includes_work_tasks(client) -> None:
+    """GET /tasks/ returns both regular and work tasks (polymorphic)."""
+    client.post("/tasks/", json={"title": "Regular task"})
+    client.post("/work-tasks/", json={"title": "Work task"})
+
+    resp = client.get("/tasks/")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 2
+    types = {item["task_type"] for item in items}
+    assert types == {"regular", "work"}
+
+
+def test_work_task_in_tasks_list_has_todo_status_and_no_priority(client) -> None:
+    """Work tasks appear in the unified list with status='todo' and priority=None."""
+    client.post("/work-tasks/", json={"title": "BH task"})
+    resp = client.get("/tasks/")
+    assert resp.status_code == 200
+    work = next(t for t in resp.json() if t["task_type"] == "work")
+    assert work["status"] == "todo"
+    assert work["priority"] is None

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from task_manager.db.database import get_db
-from task_manager.models.task import Priority, Status, Task
+from task_manager.models.task import Priority, Status, Task, TimerStatus
 from task_manager.services import task_service
 
 router = APIRouter()
@@ -15,7 +15,6 @@ class TaskCreate(BaseModel):
     title: str
     description: str | None = None
     priority: Priority = Priority.medium
-    due_date: datetime | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -23,16 +22,17 @@ class TaskUpdate(BaseModel):
     description: str | None = None
     status: Status | None = None
     priority: Priority | None = None
-    due_date: datetime | None = None
 
 
 class TaskResponse(BaseModel):
     id: int
     title: str
     description: str | None
-    status: Status
-    priority: Priority
-    due_date: datetime | None
+    task_type: str                  # "regular" | "work"
+    status: Status | None           # None for work tasks
+    priority: Priority | None       # None for work tasks
+    timer_status: TimerStatus
+    elapsed_seconds: int
     created_at: datetime
     updated_at: datetime
 

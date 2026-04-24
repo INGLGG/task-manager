@@ -21,6 +21,11 @@ class Status(str, enum.Enum):
     done = "done"
 
 
+class TaskType(str, enum.Enum):
+    regular = "regular"
+    work = "work"
+
+
 class TimerStatus(str, enum.Enum):
     idle = "idle"
     running = "running"
@@ -30,22 +35,24 @@ class TimerStatus(str, enum.Enum):
 
 class Task(Base):
     __tablename__ = "tasks"
+    __mapper_args__ = {
+        "polymorphic_on": "task_type",
+        "polymorphic_identity": "regular",
+    }
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[Status] = mapped_column(Enum(Status), default=Status.todo)
-    priority: Mapped[Priority] = mapped_column(Enum(Priority), default=Priority.medium)
-    due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Discriminator column — "regular" or "work"
+    task_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Nullable so WorkTask rows carry None for these regular-only fields
+    status: Mapped[Status | None] = mapped_column(Enum(Status), nullable=True)
+    priority: Mapped[Priority | None] = mapped_column(Enum(Priority), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
-
-    # Timer fields — persist running-segment start so elapsed survives restarts
-    timer_status: Mapped[TimerStatus] = mapped_column(
-        Enum(TimerStatus), default=TimerStatus.idle
-    )
+    timer_status: Mapped[TimerStatus] = mapped_column(Enum(TimerStatus), default=TimerStatus.idle)
     timer_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     elapsed_seconds: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -53,18 +60,23 @@ class Task(Base):
         self,
         title: str,
         description: str | None = None,
-        status: Status = Status.todo,
-        priority: Priority = Priority.medium,
-        due_date: datetime | None = None,
+        status: Status | None = Status.todo,
+        priority: Priority | None = Priority.medium,
     ) -> None:
-        # Explicit __init__ so Python-level defaults are set before any DB flush,
-        # making attribute access on unsaved instances predictable.
         super().__init__(
             title=title,
             description=description,
+            task_type="regular",
             status=status,
             priority=priority,
-            due_date=due_date,
             timer_status=TimerStatus.idle,
             elapsed_seconds=0,
         )
+
+    def get_elapsed(self, at: datetime | None = None) -> float:
+        """Wall-clock elapsed seconds, including the live running segment."""
+        base = float(self.elapsed_seconds)
+        if self.timer_status == TimerStatus.running and self.timer_started_at is not None:
+            reference = at if at is not None else datetime.utcnow()
+            base += (reference - self.timer_started_at).total_seconds()
+        return base
